@@ -10,4 +10,9 @@ class RemindersProvider extends ChangeNotifier {
     _reminders.add(reminder);
     notifyListeners();
   }
+
+  void removeReminder(String text) {
+    _reminders.removeWhere((reminder) => reminder.text == text);
+    notifyListeners();
+  }
 }

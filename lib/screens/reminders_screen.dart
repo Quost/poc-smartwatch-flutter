@@ -48,10 +48,10 @@ class _RemindersScreenState extends State<RemindersScreen> {
         NotificationDetails(android: androidPlatformChannelSpecifics);
 
     await widget.flutterLocalNotificationsPlugin.zonedSchedule(
-      0, // ID da notificação (deve ser único)
-      'Lembrete', // Título da notificação
-      reminder.text, // Corpo da notificação
-      scheduledDate, // Data e hora agendadas
+      reminder.text.hashCode,
+      'Lembrete',
+      reminder.text,
+      scheduledDate,
       platformChannelSpecifics,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
@@ -71,11 +71,16 @@ class _RemindersScreenState extends State<RemindersScreen> {
         child: ListView.builder(
           itemCount: reminders.length,
           itemBuilder: (BuildContext context, int index) {
-            final reminder = reminders[index];
+            final Reminder reminder = reminders[index];
             return ListTile(
               title: Text(reminder.date != null
                   ? '${reminder.text} - ${DateFormat('dd/MM/yyyy HH:mm').format(reminder.date!)}'
                   : reminder.text),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete),
+                onPressed: () => _showDeleteConfirmation(
+                    context, reminder.text), // Add this line
+              ),
             );
           },
         ),
@@ -158,6 +163,52 @@ class _RemindersScreenState extends State<RemindersScreen> {
         );
       },
     );
+  }
+
+  Future<void> _showDeleteConfirmation(
+      BuildContext context, String text) async {
+    bool confirmDelete = await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Delete Reminder'),
+          content: const Text('Are you sure you want to delete this reminder?'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(false); // Cancel delete
+              },
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(true); // Confirm delete
+              },
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmDelete == true) {
+      _removeReminder(text);
+    }
+  }
+
+  void _removeReminder(String text) {
+    final provider = Provider.of<RemindersProvider>(context, listen: false);
+    final reminder = provider.reminders.firstWhere((r) => r.text == text);
+
+    if (reminder.date != null) {
+      _cancelNotification(text); // Cancel the scheduled notification
+    }
+
+    provider.removeReminder(text); // Remove the reminder
+  }
+
+  void _cancelNotification(String text) {
+    widget.flutterLocalNotificationsPlugin.cancel(text.hashCode);
   }
 
   Future<DateTime?> _showDatePicker(BuildContext context) async {
