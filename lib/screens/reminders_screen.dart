@@ -20,6 +20,7 @@ class RemindersScreen extends StatefulWidget {
 }
 
 class _RemindersScreenState extends State<RemindersScreen> {
+  DateTime? _selectedDateTime;
   void _addReminder(Reminder reminder) async {
     final provider = Provider.of<RemindersProvider>(context, listen: false);
     provider.addReminder(reminder);
@@ -76,10 +77,19 @@ class _RemindersScreenState extends State<RemindersScreen> {
               title: Text(reminder.date != null
                   ? '${reminder.text} - ${DateFormat('dd/MM/yyyy HH:mm').format(reminder.date!)}'
                   : reminder.text),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete),
-                onPressed: () => _showDeleteConfirmation(
-                    context, reminder.text), // Add this line
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit),
+                    onPressed: () => _showEditDialog(context, reminder),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete),
+                    onPressed: () =>
+                        _showDeleteConfirmation(context, reminder.text),
+                  ),
+                ],
               ),
             );
           },
@@ -92,19 +102,11 @@ class _RemindersScreenState extends State<RemindersScreen> {
               await _showAddReminderDialog(context, reminderController);
 
           if (addDate) {
-            DateTime? selectedDate = await _showDatePicker(context);
-            TimeOfDay? selectedTime = await _showTimePicker(context);
+            await _selectDateTime(context, DateTime.now());
 
-            if (selectedTime != null && selectedDate != null) {
-              DateTime reminderDateTime = DateTime(
-                selectedDate.year,
-                selectedDate.month,
-                selectedDate.day,
-                selectedTime.hour,
-                selectedTime.minute,
-              );
-
-              _addReminder(Reminder(reminderController.text, reminderDateTime));
+            if (_selectedDateTime != null) {
+              _addReminder(
+                  Reminder(reminderController.text, _selectedDateTime));
             }
           } else {
             _addReminder(Reminder(reminderController.text));
@@ -196,6 +198,82 @@ class _RemindersScreenState extends State<RemindersScreen> {
     }
   }
 
+  Future<void> _showEditDialog(BuildContext context, Reminder reminder) async {
+    TextEditingController textController = TextEditingController();
+    textController.text = reminder.text;
+
+    DateTime? selectedDateTime = reminder.date;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Editar Lembrete'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: textController,
+                decoration: const InputDecoration(labelText: 'Lembrete'),
+              ),
+              const SizedBox(height: 10),
+              InkWell(
+                onTap: () async {
+                  await _selectDateTime(
+                      context, selectedDateTime); // Refresh UI
+                },
+                child: Container(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    _selectedDateTime != null
+                        ? DateFormat('dd/MM/yyyy HH:mm')
+                            .format(_selectedDateTime!)
+                        : 'Data não definida',
+                    style: TextStyle(
+                      color: _selectedDateTime != null
+                          ? Colors.black
+                          : Colors.grey,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () {
+                _editReminder(reminder, textController.text, selectedDateTime);
+                Navigator.of(context).pop();
+              },
+              child: const Text('Salvar'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _editReminder(
+    Reminder oldReminder,
+    String newText,
+    DateTime? newDateTime,
+  ) {
+    final provider = Provider.of<RemindersProvider>(context, listen: false);
+
+    // Remove o lembrete original
+    _removeReminder(oldReminder.text);
+
+    // Adiciona o novo lembrete editado
+    final newReminder = Reminder(newText, newDateTime);
+    _addReminder(newReminder);
+  }
+
   void _removeReminder(String text) {
     final provider = Provider.of<RemindersProvider>(context, listen: false);
     final reminder = provider.reminders.firstWhere((r) => r.text == text);
@@ -211,19 +289,40 @@ class _RemindersScreenState extends State<RemindersScreen> {
     widget.flutterLocalNotificationsPlugin.cancel(text.hashCode);
   }
 
-  Future<DateTime?> _showDatePicker(BuildContext context) async {
+  Future<DateTime?> _selectDateTime(
+      BuildContext context, DateTime? initialDateTime) async {
     return await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
+      initialDate: _getInitialDate(initialDateTime ?? DateTime.now()),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
+    ).then((selectedDate) async {
+      if (selectedDate != null) {
+        return await showTimePicker(
+          context: context,
+          initialTime:
+              TimeOfDay.fromDateTime(initialDateTime ?? DateTime.now()),
+        ).then((selectedTime) {
+          if (selectedTime != null) {
+            setState(() {
+              _selectedDateTime = DateTime(
+                selectedDate.year,
+                selectedDate.month,
+                selectedDate.day,
+                selectedTime.hour,
+                selectedTime.minute,
+              );
+            });
+            return _selectedDateTime;
+          }
+          return null;
+        });
+      }
+      return null;
+    });
   }
 
-  Future<TimeOfDay?> _showTimePicker(BuildContext context) async {
-    return await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-    );
+  DateTime _getInitialDate(DateTime date) {
+    return date.add(const Duration(minutes: 1));
   }
 }
